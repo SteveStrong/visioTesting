@@ -94,12 +94,21 @@ namespace WindowsFormsApp1Visio
             if (m_ovTargetDoc == null)
                 return false;
 
-            Visio.EventList ovEvents = Document.EventList;
-            EstablishEvent(ovEvents, DrawingEvents.AfterShapeAdded, true);
-            EstablishEvent(ovEvents, DrawingEvents.BeforeShapeDeleted, true);
-            EstablishEvent(ovEvents, DrawingEvents.AfterParentChanged, true);
+            m_ovControl.ShapeAdded += M_ovControl_ShapeAdded;
+
+            Visio.EventList ovEvents = m_ovTargetDoc.EventList;
+            EstablishEvent(ovEvents, DrawingEvents.AfterShapeAdded);
+            EstablishEvent(ovEvents, DrawingEvents.BeforeShapeDeleted);
+            EstablishEvent(ovEvents, DrawingEvents.AfterParentChanged);
             return true;
         }
+
+        private void M_ovControl_ShapeAdded(object sender, AxVisOcx.EVisOcx_ShapeAddedEvent e)
+        {
+            
+            Report(e.shape.ToString());
+        }
+
         public dynamic VisEventProc(short nEventCode, object pSourceObj, int nEventID, int nEventSeqNum, object pSubjectObj, object vMoreInfo)
         {
              //Debug.WriteLine( string.Format("Event Code: 0x{0:X}", nEventCode));
@@ -220,7 +229,7 @@ namespace WindowsFormsApp1Visio
         }
 
 
-        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess)
+        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess=true)
         {
             if (bProcess)
                 EnableEvent(ovEventList, iEvent);
@@ -281,49 +290,6 @@ namespace WindowsFormsApp1Visio
             return null;
         }
 
-        public Visio.Application Application
-        {
-            get
-            {
-                try
-                {
-                    if (m_ovTargetApp == null)
-                    {
-                        m_ovTargetApp = new Visio.Application();
-                    }
-
-
-
-                    return this.m_ovTargetApp;
-                }
-                catch (Exception e)
-                {
-                    ReportException(e);
-                    return null;
-                }
-            }
-        }
-
-
-        public Visio.Document Document
-        {
-            get
-            {
-                try
-                {
-                    if (m_ovTargetDoc != null)
-                        return m_ovTargetDoc;
-
-                    m_ovTargetDoc = Application.ActiveDocument;
-                    return m_ovTargetDoc;
-                }
-                catch (Exception e)
-                {
-                    ReportException(e);
-                    return null;
-                }
-            }
-        }
 
         private Visio.Document LoadDocument(string sPath)
         {
@@ -349,6 +315,7 @@ namespace WindowsFormsApp1Visio
             m_ovTargetApp.Settings.DrawingAids = true;
             m_ovTargetApp.Settings.HigherQualityShapeDisplay = true;
             m_ovTargetApp.Settings.SmoothDrawing = true;
+            m_ovTargetApp.EventsEnabled = (short)visTF.TRUE;
 
             return m_ovTargetDoc;
         }
