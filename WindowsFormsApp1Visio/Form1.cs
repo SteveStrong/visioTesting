@@ -4,6 +4,7 @@ using System.Collections;
 
 using AxVisOcx = AxMicrosoft.Office.Interop.VisOcx;
 using Visio = Microsoft.Office.Interop.Visio;
+using System.Runtime.InteropServices;
 
 namespace WindowsFormsApp1Visio
 {
@@ -52,7 +53,7 @@ namespace WindowsFormsApp1Visio
         BeforeDocumentClosed = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtDoc),
         AfterPageAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtPage),
         BeforePageDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtPage),
-        AfterShapeAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtShape),
+        AfterShapeAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + Visio.VisEventCodes.visEvtShape),
         BeforeShapeDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtShape),
         AfterConnectionAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtConnect),
         BeforeConnectionDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtConnect),
@@ -60,14 +61,21 @@ namespace WindowsFormsApp1Visio
         BeforeWindowSelectionDeleted = (short)Visio.VisEventCodes.visEvtCodeBefWinSelDel,
     }
 
-
+    //[System.Runtime.InteropServices.ComVisible(true)]
+    [CLSCompliant(false)]
     public partial class Form1 : Form, Visio.IVisEventProc
     {
         protected Visio.Application m_ovTargetApp = null;
         protected Visio.Document m_ovTargetDoc = null;
         protected AxVisOcx.AxDrawingControl m_ovControl = null;
         protected Hashtable m_ovEvents = new Hashtable();
- 
+
+
+        private Visio.Application visioApplication;
+        private Visio.Document visioDocument;
+        private int alertResponse = 0;
+        private string applicationName = "";
+        private EventSink visioEventSink;
 
         public Form1()
         {
@@ -75,6 +83,144 @@ namespace WindowsFormsApp1Visio
             m_ovControl = axDrawingControl1;
             ultraTextEditor1.AcceptsReturn = true;
             m_ovControl.PageAdded += AxDrawingControl1_PageAdded;
+            //m_ovControl.VisibleChanged += M_ovControl_VisibleChanged;
+        }
+
+        private void M_ovControl_VisibleChanged(object sender, EventArgs e)
+        {
+            setUpVisioDrawing();
+        }
+
+        private void setUpVisioDrawing()
+        {
+
+            double pageLeft;
+            double pageTop;
+            double pageWidth;
+            double pageHeight;
+
+            try
+            {
+
+                // Cache the application name for use in message box captions.
+                applicationName = m_ovControl.Window.Application.Name;
+
+                // Cache the AlertResponse setting in a member variable.
+                alertResponse = m_ovControl.Window.Application.AlertResponse;
+
+                // Hide all built-in docked windows (shape search, 
+                // custom properties (shape data), etc.).
+                //for (int i = m_ovControl.Window.Windows.Count; i > 0; i--)
+                //{
+                //    Visio.Window visWindow;
+                //    int windowType;
+
+                //    visWindow = m_ovControl.Window.Windows.get_ItemEx(i);
+                //    windowType = visWindow.Type;
+
+                //    if (windowType == (int)Visio.VisWinTypes.visAnchorBarBuiltIn)
+                //    {
+
+                //        switch (visWindow.ID)
+                //        {
+                //            case (int)Visio.VisWinTypes.visWinIDCustProp:
+                //            case (int)Visio.VisWinTypes.visWinIDDrawingExplorer:
+                //            case (int)Visio.VisWinTypes.visWinIDMasterExplorer:
+                //            case (int)Visio.VisWinTypes.visWinIDPanZoom:
+                //            case (int)Visio.VisWinTypes.visWinIDShapeSearch:
+                //            case (int)Visio.VisWinTypes.visWinIDSizePos:
+                //            case (int)Visio.VisWinTypes.visWinIDStencilExplorer:
+
+                //                visWindow.Visible = false;
+                //                break;
+
+                //            default:
+                //                break;
+                //        }
+                //    }
+                //}
+
+                // Use the Visio window to set the visible user
+                // interface parts of the window.
+                Visio.Window targetWindow;
+                targetWindow = (Visio.Window)m_ovControl.Window;
+
+                //targetWindow.ShowRulers = 0;
+                //targetWindow.ShowPageTabs = false;
+                //targetWindow.ShowScrollBars = 0;
+                //targetWindow.ShowGrid = 0;
+                //targetWindow.Zoom = 1.00;
+
+                // Position the furniture shapes relative to the page.
+                targetWindow.GetViewRect(out pageLeft, out pageTop, out pageWidth, out pageHeight);
+
+
+
+                // Start the event sink.
+                initializeEventSink();
+            }
+
+            catch (COMException error)
+            {
+
+                // Display the error.
+                Utility.DisplayException(Strings.ComErrorMessage,error, alertResponse);
+                throw;
+            }
+
+            return;
+        }
+
+        private void initializeEventSink()
+        {
+
+            try
+            {
+
+                // Release the previous event sink.
+                visioEventSink = null;
+
+                // Create an event sink to hook up events to the Visio
+                // application and document.
+                visioEventSink = new EventSink();
+                visioApplication = (Visio.Application)m_ovControl.Window.Application;
+                visioDocument = (Visio.Document)m_ovControl.Document;
+
+                visioEventSink.AddAdvise(visioApplication, visioDocument);
+
+                // Listen to shape add events from the Visio event sink.
+                // OnAddProductInformation will be called when a shape is added.
+                visioEventSink.OnShapeAdd += new VisioEventHandler(onAddProductInformation);
+
+                // Listen to shape delete events from the Visio event sink.
+                // OnRemoveProductInformation will be called when a shape is deleted.
+                visioEventSink.OnShapeDelete += new VisioEventHandler(onRemoveProductInformation);
+
+                // Listen to marker events raised when the user double-clicks a shape.
+                // OnShapeDoubleClick will be called when the user double-clicks
+                // a shape whose double-click event runs the QueueMarkerEvent addon.
+                visioEventSink.OnShapeDoubleClick += new VisioEventHandler(onShapeDoubleClick);
+            }
+
+            catch (COMException error)
+            {
+
+                // Display the error.
+                Utility.DisplayException(Strings.ComErrorMessage, error, alertResponse);
+                throw;
+            }
+        }
+
+        private void onAddProductInformation(object sender, EventArgs e)
+        {
+        }
+
+        private void onRemoveProductInformation(object sender, EventArgs e)
+        {
+        }
+
+        private void onShapeDoubleClick(object sender, EventArgs e)
+        {
         }
 
         void Report(string text)
@@ -94,24 +240,26 @@ namespace WindowsFormsApp1Visio
             if (m_ovTargetDoc == null)
                 return false;
 
-            m_ovControl.ShapeAdded += M_ovControl_ShapeAdded;
+            setUpVisioDrawing();
 
-            Visio.EventList ovEvents = m_ovTargetDoc.EventList;
-            EstablishEvent(ovEvents, DrawingEvents.AfterShapeAdded);
-            EstablishEvent(ovEvents, DrawingEvents.BeforeShapeDeleted);
-            EstablishEvent(ovEvents, DrawingEvents.AfterParentChanged);
+            //m_ovControl.ShapeAdded += M_ovControl_ShapeAdded;
+
+            //Visio.EventList ovEvents = m_ovTargetDoc.EventList;
+            //EstablishEvent(ovEvents, DrawingEvents.AfterShapeAdded);
+            //EstablishEvent(ovEvents, DrawingEvents.BeforeShapeDeleted);
+            //EstablishEvent(ovEvents, DrawingEvents.AfterParentChanged);
             return true;
         }
 
         private void M_ovControl_ShapeAdded(object sender, AxVisOcx.EVisOcx_ShapeAddedEvent e)
         {
-            
+
             Report(e.shape.ToString());
         }
 
         public dynamic VisEventProc(short nEventCode, object pSourceObj, int nEventID, int nEventSeqNum, object pSubjectObj, object vMoreInfo)
         {
-             //Debug.WriteLine( string.Format("Event Code: 0x{0:X}", nEventCode));
+            //Debug.WriteLine( string.Format("Event Code: 0x{0:X}", nEventCode));
 
             //very critical to prevent other applications from reacting
             //to events ment for this one.
@@ -136,7 +284,7 @@ namespace WindowsFormsApp1Visio
                     case (short)DrawingEvents.BeforePageTurn:
                         break;
                     case (short)DrawingEvents.AfterPageTurn:
-                         break;
+                        break;
                     case (short)DrawingEvents.AfterPageChanged:
                         break;
                     case (short)DrawingEvents.AfterParentChanged:
@@ -229,7 +377,7 @@ namespace WindowsFormsApp1Visio
         }
 
 
-        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess=true)
+        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess = true)
         {
             if (bProcess)
                 EnableEvent(ovEventList, iEvent);
