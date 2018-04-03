@@ -64,76 +64,258 @@ namespace WindowsFormsApp1Visio
     /// <summary>The EventSink class handles events from Visio
     /// which are specified in the AddAdvise method.</summary>
     [System.Runtime.InteropServices.ComVisible(true)]
-    public sealed class VisioEventSink : Visio.IVisEventProc
+    public class VisioEventSink : Visio.IVisEventProc
     {
-
-
-        /// <summary>Visio.Application object.</summary>
-        //private Visio.Application eventApplication;
-
-        /// <summary>Visio.Document object.</summary>
+        private Visio.Application eventApplication;
         private Visio.Document eventDocument;
+        private Infragistics.Win.UltraWinEditors.UltraTextEditor ultraTextEditor1;
+        private Hashtable m_ovEvents = new Hashtable();
+
+
+        public VisioEventSink(Visio.Document callingDocument, Infragistics.Win.UltraWinEditors.UltraTextEditor editor)
+        {
+            eventDocument = callingDocument;
+            eventApplication = callingDocument.Application;
+            ultraTextEditor1 = editor;
+        }
+
+
+        void Report(string text)
+        {
+            this.ultraTextEditor1.AppendText(text);
+            this.ultraTextEditor1.AppendText("\n");
+        }
+
+        void ReportException(Exception e)
+        {
+            Report(e.Message);
+        }
+
 
         //[CLSCompliant(false)]
-        public void AddAdvise(Visio.Application callingApplication, Visio.Document callingDocument)
+        public void AddAdvise()
         {
             const string sink = "";
             const string targetArgs = "";
 
-            // Save the document for setting the events.
-            eventDocument = callingDocument;
             Visio.EventList documentEvents = eventDocument.EventList;
 
 
-            documentEvents.AddAdvise((short)DrawingEvents.AfterShapeAdded, (Visio.IVisEventProc)this, sink, targetArgs);
+            //documentEvents.AddAdvise((short)DrawingEvents.AfterShapeAdded, (Visio.IVisEventProc)this, sink, targetArgs);
 
             //Visio.EventList ovEvents = m_ovTargetDoc.EventList;
-            //CreateEvent(ovEvents, DrawingEvents.AfterShapeAdded);
+            EstablishEvent(documentEvents, DrawingEvents.AfterShapeAdded);
         }
 
 
-
-
-        object Visio.IVisEventProc.VisEventProc(short eventCode, object source, int eventId, int eventSequenceNumber, object subject, object moreInfo)
+        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess = true)
         {
+            if (bProcess)
+                EnableEvent(ovEventList, iEvent);
+            else
+                DisableEvent(ovEventList, iEvent, true);
+        }
 
-            Visio.Shape eventShape = null;
-            if ((eventCode & (short)Visio.VisEventCodes.visEvtShape) > 0)
+        public Visio.Event EnableEvent(Visio.EventList ovEventList, DrawingEvents iEvent)
+        {
+            Visio.Event ovEvent = null;
+            string sKey = iEvent.ToString();
+
+            if (m_ovEvents.ContainsKey(sKey) == true)
+                ovEvent = m_ovEvents[sKey] as Visio.Event;
+            else
             {
-                eventShape = (Visio.Shape)subject;
-            }
+                ovEvent = CreateEvent(ovEventList, iEvent);
+                if (ovEvent == null)
+                    return null;
 
-            switch (eventCode)
+                m_ovEvents.Add(sKey, ovEvent);
+            }
+           // ovEvent.Enabled = (short)visTF.TRUE;
+            return ovEvent;
+        }
+
+        public Visio.Event DisableEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bRemove)
+        {
+            Visio.Event ovEvent = null;
+            string sKey = iEvent.ToString();
+
+            if (m_ovEvents.ContainsKey(sKey) == true)
             {
+                ovEvent = m_ovEvents[sKey] as Visio.Event;
+                if (bRemove)
+                    m_ovEvents.Remove(sKey);
 
-                case (short)DrawingEvents.AfterShapeAdded:
-
-                    // Handle the add-shape event.
-                    //handleShapeAdd(eventShape);
-                    break;
-
-                default:
-                    break;
+                try
+                {
+                    ovEvent.Enabled = (short)visTF.FALSE;
+                }
+                catch { }
             }
+            return ovEvent;
+        }
 
+        public Visio.Event CreateEvent(Visio.EventList ovEventList, DrawingEvents iEvent)
+        {
+            const string sink = "";
+            const string targetArgs = "";
+            try
+            {
+                return ovEventList.AddAdvise((short)iEvent, (Visio.IVisEventProc)this, sink, targetArgs);
+            }
+            catch (Exception e)
+            {
+                ReportException(e);
+            }
             return null;
         }
+
+
+        //object Visio.IVisEventProc.VisEventProcOld(short eventCode, object source, int eventId, int eventSequenceNumber, object subject, object moreInfo)
+        //{
+
+        //    Visio.Shape eventShape = null;
+        //    if ((eventCode & (short)Visio.VisEventCodes.visEvtShape) > 0)
+        //    {
+        //        eventShape = (Visio.Shape)subject;
+        //    }
+
+        //    switch (eventCode)
+        //    {
+
+        //        case (short)DrawingEvents.AfterShapeAdded:
+
+        //            // Handle the add-shape event.
+        //            //handleShapeAdd(eventShape);
+        //            break;
+
+        //        default:
+        //            break;
+        //    }
+
+        //    return null;
+        //}
+
+        object Visio.IVisEventProc.VisEventProc(short nEventCode, object pSourceObj, int nEventID, int nEventSeqNum, object pSubjectObj, object vMoreInfo)
+        {
+            //Debug.WriteLine( string.Format("Event Code: 0x{0:X}", nEventCode));
+
+            //very critical to prevent other applications from reacting
+            //to events ment for this one.
+            //Visio.Application oApp = pSourceObj as Visio.Application;
+            var m_iLastScope = eventApplication.CurrentScope;
+
+            try
+            {
+                switch (nEventCode)
+                {
+                    case (short)DrawingEvents.BeforeApplicationQuit:
+                        break;
+                    case (short)DrawingEvents.AfterSelectionChanged:
+                        Visio.Window ovWin = pSubjectObj as Visio.Window;
+                        break;
+                    case (short)DrawingEvents.BeforeTextEdit:
+                        break;
+                    case (short)DrawingEvents.AfterTextEdit:
+                        break;
+                    case (short)DrawingEvents.AfterTextChanged:
+                        break;
+                    case (short)DrawingEvents.BeforePageTurn:
+                        break;
+                    case (short)DrawingEvents.AfterPageTurn:
+                        break;
+                    case (short)DrawingEvents.AfterPageChanged:
+                        break;
+                    case (short)DrawingEvents.AfterParentChanged:
+                        break;
+                    case (short)DrawingEvents.AfterDocumentOpened:
+                        break;
+                    case (short)DrawingEvents.BeforeDocumentClosed:
+                        break;
+                    case (short)DrawingEvents.AfterPageAdded:
+                        break;
+                    case (short)DrawingEvents.BeforePageDeleted:
+                        break;
+                    case (short)DrawingEvents.AfterShapeAdded:     
+                        switch (m_iLastScope)
+                        {
+                            case 1166: // Duplicate from automation call shape
+                                break; // Shape should not be added
+                            case 1184: // control drag shapes
+                            case 1024: // Duplicate shape
+                            case 1017: // undo shape
+                                break;
+                            case 1018: // redo shape
+                            case 1022: // Paste shape
+                                break;
+                            case 0: // undo shape sort of
+                                break;
+                            default:
+                                break;
+                        }
+                        break;
+                    case (short)DrawingEvents.BeforeWindowSelectionDeleted:
+                        break;
+                    case (short)DrawingEvents.BeforeSelectionDeleted:
+                        switch (m_iLastScope)
+                        {
+                            case 1023: // Delete key
+                                break;
+                            case 1020: // Cut shape
+                            case 1017: // undo shape
+                            case 1018: // redo shape
+                                break;
+                            case 1486: // deleted from page on moved
+                            default:
+                                break;
+                        }
+                        break;
+                    case (short)DrawingEvents.BeforeShapeDeleted:
+                        break;
+                    case (short)DrawingEvents.AfterConnectionAdded:
+                        break;
+                    case (short)DrawingEvents.BeforeConnectionDeleted:
+                        break;
+                    case (short)DrawingEvents.AfterKeyPress:
+                        break;
+                    case (short)DrawingEvents.AfterKeyDown:
+                        break;
+                    case (short)DrawingEvents.AfterKeyUp:
+                        break;
+
+                    case (short)DrawingEvents.QueryCancelSelectionDelete:
+                        break;
+                    case (short)DrawingEvents.QueryCancelMasterDelete:
+                        break;
+                    case (short)DrawingEvents.QueryCancelPageDelete:
+                        break;
+                    case (short)DrawingEvents.QueryCancelDocumentClose:
+                        break;
+                    case (short)DrawingEvents.QueryCancelQuit:
+                        break;
+
+                    default:
+                        return null;
+                }
+            }
+            catch (Exception e)
+            {
+                ReportException(e);
+            }
+            return null;
+        }
+
     }
 
 
-    public partial class Form1 : Form, Visio.IVisEventProc
+    public partial class Form1 : Form
     {
         protected Visio.Application m_ovTargetApp = null;
         protected Visio.Document m_ovTargetDoc = null;
         protected AxVisOcx.AxDrawingControl m_ovControl = null;
-        protected Hashtable m_ovEvents = new Hashtable();
 
 
-        private Visio.Application visioApplication;
-        private Visio.Document visioDocument;
-        private int alertResponse = 0;
-        private string applicationName = "";
-        private VisioEventSink visioEventSink;
+        protected VisioEventSink visioEventSink;
 
 
         public Form1()
@@ -177,16 +359,9 @@ namespace WindowsFormsApp1Visio
             if (m_ovTargetDoc == null)
                 return false;
 
-            visioEventSink = new VisioEventSink();
-            visioEventSink.AddAdvise(m_ovTargetApp, m_ovTargetDoc);
-            //setUpVisioDrawing();
+            visioEventSink = new VisioEventSink(m_ovTargetDoc, ultraTextEditor1);
+            visioEventSink.AddAdvise();
 
-            //m_ovControl.ShapeAdded += M_ovControl_ShapeAdded;
-
-            //Visio.EventList ovEvents = m_ovTargetDoc.EventList;
-            //CreateEvent(ovEvents, DrawingEvents.AfterShapeAdded);
-            //EstablishEvent(ovEvents, DrawingEvents.BeforeShapeDeleted);
-            //EstablishEvent(ovEvents, DrawingEvents.AfterParentChanged);
             return true;
         }
 
@@ -196,118 +371,7 @@ namespace WindowsFormsApp1Visio
             Report(e.shape.ToString());
         }
 
-        object Visio.IVisEventProc.VisEventProc(short nEventCode, object pSourceObj, int nEventID, int nEventSeqNum, object pSubjectObj, object vMoreInfo)
-        {
-            //Debug.WriteLine( string.Format("Event Code: 0x{0:X}", nEventCode));
-
-            //very critical to prevent other applications from reacting
-            //to events ment for this one.
-            Visio.Application oApp = pSourceObj as Visio.Application;
-
-
-            try
-            {
-                switch (nEventCode)
-                {
-                    case (short)DrawingEvents.BeforeApplicationQuit:
-                        break;
-                    case (short)DrawingEvents.AfterSelectionChanged:
-                        Visio.Window ovWin = pSubjectObj as Visio.Window;
-                        break;
-                    case (short)DrawingEvents.BeforeTextEdit:
-                        break;
-                    case (short)DrawingEvents.AfterTextEdit:
-                        break;
-                    case (short)DrawingEvents.AfterTextChanged:
-                        break;
-                    case (short)DrawingEvents.BeforePageTurn:
-                        break;
-                    case (short)DrawingEvents.AfterPageTurn:
-                        break;
-                    case (short)DrawingEvents.AfterPageChanged:
-                        break;
-                    case (short)DrawingEvents.AfterParentChanged:
-                        break;
-                    case (short)DrawingEvents.AfterDocumentOpened:
-                        break;
-                    case (short)DrawingEvents.BeforeDocumentClosed:
-                        break;
-                    case (short)DrawingEvents.AfterPageAdded:
-                        break;
-                    case (short)DrawingEvents.BeforePageDeleted:
-                        break;
-                    case (short)DrawingEvents.AfterShapeAdded:
-                        var m_iLastScope = m_ovTargetApp.CurrentScope;
-                        switch (m_iLastScope)
-                        {
-                            case 1166: // Duplicate from automation call shape
-                                break; // Shape should not be added
-                            case 1184: // control drag shapes
-                            case 1024: // Duplicate shape
-                            case 1017: // undo shape
-                                break;
-                            case 1018: // redo shape
-                            case 1022: // Paste shape
-                                break;
-                            case 0: // undo shape sort of
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    case (short)DrawingEvents.BeforeWindowSelectionDeleted:
-                        break;
-                    case (short)DrawingEvents.BeforeSelectionDeleted:
-                        m_iLastScope = m_ovTargetApp.CurrentScope;
-                        switch (m_iLastScope)
-                        {
-                            case 1023: // Delete key
-                                break;
-                            case 1020: // Cut shape
-                            case 1017: // undo shape
-                            case 1018: // redo shape
-                                break;
-                            case 1486: // deleted from page on moved
-                            default:
-                                break;
-                        }
-                        break;
-                    case (short)DrawingEvents.BeforeShapeDeleted:
-                        m_iLastScope = m_ovTargetApp.CurrentScope;
-                        break;
-                    case (short)DrawingEvents.AfterConnectionAdded:
-                        break;
-                    case (short)DrawingEvents.BeforeConnectionDeleted:
-                        break;
-                    case (short)DrawingEvents.AfterKeyPress:
-                        break;
-                    case (short)DrawingEvents.AfterKeyDown:
-                        break;
-                    case (short)DrawingEvents.AfterKeyUp:
-                        break;
-
-                    case (short)DrawingEvents.QueryCancelSelectionDelete:
-                        break;
-                    case (short)DrawingEvents.QueryCancelMasterDelete:
-                        break;
-                    case (short)DrawingEvents.QueryCancelPageDelete:
-                        break;
-                    case (short)DrawingEvents.QueryCancelDocumentClose:
-                        break;
-                    case (short)DrawingEvents.QueryCancelQuit:
-                        break;
-
-                    default:
-                        return null;
-                }
-            }
-            catch (Exception e)
-            {
-                ReportException(e);
-            }
-            return null;
-        }
-
+ 
 
 
         private void AxDrawingControl1_PageAdded(object sender, AxVisOcx.EVisOcx_PageAddedEvent e)
@@ -316,68 +380,6 @@ namespace WindowsFormsApp1Visio
         }
 
 
-        public void EstablishEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bProcess = true)
-        {
-            if (bProcess)
-                EnableEvent(ovEventList, iEvent);
-            else
-                DisableEvent(ovEventList, iEvent, true);
-        }
-
-        public Visio.Event EnableEvent(Visio.EventList ovEventList, DrawingEvents iEvent)
-        {
-            Visio.Event ovEvent = null;
-            string sKey = iEvent.ToString();
-
-            if (m_ovEvents.ContainsKey(sKey) == true)
-                ovEvent = m_ovEvents[sKey] as Visio.Event;
-            else
-            {
-                ovEvent = CreateEvent(ovEventList, iEvent);
-                if (ovEvent == null)
-                    return null;
-
-                m_ovEvents.Add(sKey, ovEvent);
-            }
-            ovEvent.Enabled = (short)visTF.TRUE;
-            return ovEvent;
-        }
-
-        public Visio.Event DisableEvent(Visio.EventList ovEventList, DrawingEvents iEvent, bool bRemove)
-        {
-            Visio.Event ovEvent = null;
-            string sKey = iEvent.ToString();
-
-            if (m_ovEvents.ContainsKey(sKey) == true)
-            {
-                ovEvent = m_ovEvents[sKey] as Visio.Event;
-                if (bRemove)
-                    m_ovEvents.Remove(sKey);
-
-                try
-                {
-                    ovEvent.Enabled = (short)visTF.FALSE;
-                }
-                catch { }
-            }
-            return ovEvent;
-        }
-
-        [CLSCompliant(false)]
-        public Visio.Event CreateEvent(Visio.EventList ovEventList, DrawingEvents iEvent)
-        {
-            const string sink = "";
-            const string targetArgs = "";
-            try
-            {
-                return ovEventList.AddAdvise((short)iEvent, (Visio.IVisEventProc)this, sink, targetArgs);
-            }
-            catch (Exception e)
-            {
-                ReportException(e);
-            }
-            return null;
-        }
 
 
         private Visio.Document LoadDocument(string sPath)
