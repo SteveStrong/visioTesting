@@ -69,12 +69,12 @@ namespace WindowsFormsApp1Visio
 
 
         /// <summary>Visio.Application object.</summary>
-        private Visio.Application eventApplication;
+        //private Visio.Application eventApplication;
 
         /// <summary>Visio.Document object.</summary>
         private Visio.Document eventDocument;
 
-        [CLSCompliant(false)]
+        //[CLSCompliant(false)]
         public void AddAdvise(Visio.Application callingApplication, Visio.Document callingDocument)
         {
             const string sink = "";
@@ -106,7 +106,7 @@ namespace WindowsFormsApp1Visio
             switch (eventCode)
             {
 
-                case (short)DrawingVisioEvents.AfterShapeAdded:
+                case (short)DrawingEvents.AfterShapeAdded:
 
                     // Handle the add-shape event.
                     //handleShapeAdd(eventShape);
