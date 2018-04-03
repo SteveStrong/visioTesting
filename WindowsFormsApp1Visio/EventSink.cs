@@ -14,15 +14,46 @@ using Visio = Microsoft.Office.Interop.Visio;
 namespace WindowsFormsApp1Visio
 {
 
-    /// <summary>VisioEventHandler is an event delegate used for raising 
-    /// events. Events are used to decouple this class from the 
-    /// OfficePlanSampleForm class.</summary>
-    /// <param name="sender">The Visio object that raised the event</param>
-    /// <param name="e">The arguments associated with the event</param>
-    // Suppress this warning because generic event handler doesn't work here. 
-    // Generic event handler uses parameter "sender" to differentiate the handlers,
-    // but "OnShapeAdd" and "OnShapeDelete" handlers both use the "sender" to pass
-    // a Visio shape. 
+
+    public enum DrawingVisioEvents : short
+    {
+        QueryCancelSelectionDelete = (short)Visio.VisEventCodes.visEvtCodeQueryCancelSelDel,
+        QueryCancelMasterDelete = (short)Visio.VisEventCodes.visEvtCodeQueryCancelMasterDel,
+        QueryCancelDocumentClose = (short)Visio.VisEventCodes.visEvtCodeQueryCancelDocClose,
+        QueryCancelPageDelete = (short)Visio.VisEventCodes.visEvtCodeQueryCancelPageDel,
+        QueryCancelQuit = (short)Visio.VisEventCodes.visEvtCodeQueryCancelQuit,
+
+        AfterKeyPress = (short)Visio.VisEventCodes.visEvtCodeKeyPress,
+        AfterKeyDown = (short)Visio.VisEventCodes.visEvtCodeKeyDown,
+        AfterKeyUp = (short)Visio.VisEventCodes.visEvtCodeKeyUp,
+
+        AfterSelectionChanged = (short)Visio.VisEventCodes.visEvtCodeWinSelChange,
+        AfterMarker = (unchecked((short)Visio.VisEventCodes.visEvtApp) + (short)Visio.VisEventCodes.visEvtMarker),
+        AfterWindowActivate = (unchecked((short)Visio.VisEventCodes.visEvtApp) + (short)Visio.VisEventCodes.visEvtWinActivate),
+        AfterIdle = (unchecked((short)Visio.VisEventCodes.visEvtApp) + (short)Visio.VisEventCodes.visEvtNonePending),
+        BeforeTextEdit = (short)Visio.VisEventCodes.visEvtCodeShapeBeforeTextEdit,
+        AfterTextEdit = (short)Visio.VisEventCodes.visEvtCodeShapeExitTextEdit,
+        AfterTextChanged = (unchecked((short)Visio.VisEventCodes.visEvtMod) + (short)Visio.VisEventCodes.visEvtText),
+        AfterCellChanged = (unchecked((short)Visio.VisEventCodes.visEvtMod) + (short)Visio.VisEventCodes.visEvtCell),
+        AfterParentChanged = (short)Visio.VisEventCodes.visEvtCodeShapeParentChange,
+        BeforePageTurn = (short)Visio.VisEventCodes.visEvtCodeBefWinPageTurn,
+        AfterPageTurn = (short)Visio.VisEventCodes.visEvtCodeWinPageTurn,
+        AfterPageChanged = (unchecked((short)Visio.VisEventCodes.visEvtMod) + (short)Visio.VisEventCodes.visEvtPage),
+        BeforeApplicationQuit = (short)Visio.VisEventCodes.visEvtBeforeQuit,
+        AfterDocumentOpened = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtDoc),
+        BeforeDocumentClosed = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtDoc),
+        AfterPageAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtPage),
+        BeforePageDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtPage),
+        AfterShapeAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + Visio.VisEventCodes.visEvtShape),
+        BeforeShapeDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtShape),
+        AfterConnectionAdded = (unchecked((short)Visio.VisEventCodes.visEvtAdd) + (short)Visio.VisEventCodes.visEvtConnect),
+        BeforeConnectionDeleted = (unchecked((short)Visio.VisEventCodes.visEvtDel) + (short)Visio.VisEventCodes.visEvtConnect),
+        BeforeSelectionDeleted = (short)Visio.VisEventCodes.visEvtCodeBefSelDel,
+        BeforeWindowSelectionDeleted = (short)Visio.VisEventCodes.visEvtCodeBefWinSelDel,
+    }
+
+
+
     //[SuppressMessage("Microsoft.Design", "CA1003:UseGenericEventHandlerInstances")]
     public delegate void VisioEventHandler(object sender, EventArgs e);
 
@@ -63,9 +94,6 @@ namespace WindowsFormsApp1Visio
         /// will be used to hold added and deleted shapes for processing.</summary>
         public EventSink()
         {
-
-            // Create the added and deleted queues.  They will be cleaned
-            // up when the EventSink is deleted.
             shapeAddedQueue = new System.Collections.Queue();
             shapeDeletedQueue = new System.Collections.Queue();
         }
@@ -74,31 +102,24 @@ namespace WindowsFormsApp1Visio
         [CLSCompliant(false)]
         public void AddAdvise(Visio.Application callingApplication, Visio.Document callingDocument)
         {
-
-            // The calling application must exist.
-            if (callingApplication == null)
-            {
-
-                // Throw a meaningful error.
-                throw new ArgumentNullException("callingApplication", Utility.GetResourceString(Strings.NullApplicationError));
-            }
-
-            // The calling document must exist.
-            if (callingDocument == null)
-            {
-
-                // Throw a meaningful error.
-                throw new ArgumentNullException("callingDocument", Utility.GetResourceString(Strings.NullDocumentError));
-            }
+            const string sink = "";
+            const string targetArgs = "";
 
             // Save the application for setting the events.
             eventApplication = callingApplication;
+            EventList applicationEvents = eventApplication.EventList;
+
+            applicationEvents.AddAdvise((short)DrawingVisioEvents.AfterIdle, (IVisEventProc)this, sink, targetArgs);
 
             // Save the document for setting the events.
             eventDocument = callingDocument;
+            EventList documentEvents = eventDocument.EventList;
 
             // Add events of interest.
-            setAddAdvise();
+            //setAddAdvise();
+
+            documentEvents.AddAdvise((short)DrawingVisioEvents.AfterShapeAdded, (IVisEventProc)this, sink, targetArgs);
+            //documentEvents.AddAdvise((unchecked((short)VisEventCodes.visEvtAdd) + (short)VisEventCodes.visEvtShape), (IVisEventProc)this, sink, targetArgs);
 
             return;
         }
@@ -123,7 +144,7 @@ namespace WindowsFormsApp1Visio
             switch (eventCode)
             {
 
-                case (short)VisEventCodes.visEvtShape + unchecked((short)VisEventCodes.visEvtAdd):
+                case (short)DrawingVisioEvents.AfterShapeAdded:
 
                     // Handle the add-shape event.
                     handleShapeAdd(eventShape);
